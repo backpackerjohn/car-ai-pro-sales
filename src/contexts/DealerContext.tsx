@@ -69,6 +69,8 @@ interface DealerContextType {
   salesScenarios: ScenarioType[];
   fieldDefinitions: Record<string, FieldDefinition>;
   requiredDocuments: string[];
+  documentImage: string | null;
+  setDocumentImage: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 // Create context
@@ -81,6 +83,7 @@ export const DealerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [tradeInVehicle, setTradeInVehicle] = useState<TradeInInfo | null>(null);
   const [lenderInfo, setLenderInfo] = useState<LenderInfo | null>(null);
   const [salesScenario, setSalesScenario] = useState<string>('');
+  const [documentImage, setDocumentImage] = useState<string | null>(null);
 
   // Get required documents based on active scenario
   const requiredDocuments = salesScenario 
@@ -101,6 +104,8 @@ export const DealerProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     salesScenarios: dealerData.salesScenarios,
     fieldDefinitions: dealerData.fieldDefinitions,
     requiredDocuments,
+    documentImage,
+    setDocumentImage,
   };
 
   return <DealerContext.Provider value={value}>{children}</DealerContext.Provider>;

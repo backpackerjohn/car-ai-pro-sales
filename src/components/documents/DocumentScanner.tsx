@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react';
 const DocumentScanner = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
-  const { setCurrentCustomer } = useDealer();
+  const { setCurrentCustomer, setDocumentImage } = useDealer();
 
   const handleFileScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -19,6 +19,10 @@ const DocumentScanner = () => {
     setScanProgress(0);
 
     try {
+      // Store the image in context for later use
+      const imageUrl = URL.createObjectURL(file);
+      setDocumentImage(imageUrl);
+      
       const worker = await createWorker({
         logger: (m) => {
           if (m.status === 'recognizing text') {

@@ -200,17 +200,27 @@ Assess the conversation stage and recommend moving to the next stage when approp
       // Simulate an AI response with structured data
       let mockedResponse = "I'd recommend discussing the financing options available for this customer. ";
       
-      // Add some mock extracted data based on the user's input
-      if (input.toLowerCase().includes('john') || input.toLowerCase().includes('name')) {
-        mockedResponse += '<field name="firstName">John</field> <field name="lastName">Smith</field>';
+      // Use actual customer data from context if available instead of hard-coded mock data
+      if (currentCustomer?.firstName && currentCustomer?.lastName) {
+        mockedResponse += `<field name="firstName">${currentCustomer.firstName}</field> <field name="lastName">${currentCustomer.lastName}</field>`;
+      } else if (input.toLowerCase().includes('name')) {
+        // If no customer data is available but user mentioned a name, extract from input
+        if (input.toLowerCase().includes('stephen') || input.toLowerCase().includes('schreck')) {
+          mockedResponse += '<field name="firstName">Stephen</field> <field name="lastName">Schreck</field>';
+        }
       }
       
-      if (input.toLowerCase().includes('address') || input.toLowerCase().includes('live')) {
-        mockedResponse += '<field name="address">123 Main Street</field> <field name="city">Columbus</field> <field name="state">OH</field> <field name="zipCode">43215</field>';
+      // Use actual address data from context if available
+      if (currentCustomer?.address && currentCustomer?.city && currentCustomer?.state && currentCustomer?.zipCode) {
+        mockedResponse += `<field name="address">${currentCustomer.address}</field> <field name="city">${currentCustomer.city}</field> <field name="state">${currentCustomer.state}</field> <field name="zipCode">${currentCustomer.zipCode}</field>`;
+      } else if (input.toLowerCase().includes('address') || input.toLowerCase().includes('live')) {
+        // Only mock address data if user asked about address
+        mockedResponse += '<field name="address">533 BELLEVIEW AVE</field> <field name="city">CHILLICOTHE</field> <field name="state">OH</field> <field name="zipCode">45601</field>';
       }
       
       if (input.toLowerCase().includes('phone') || input.toLowerCase().includes('call')) {
-        mockedResponse += '<field name="cellPhone">(614) 555-1234</field>';
+        const phone = currentCustomer?.cellPhone || '(614) 555-1234';
+        mockedResponse += `<field name="cellPhone">${phone}</field>`;
       }
       
       // Add sales suggestion based on keywords
