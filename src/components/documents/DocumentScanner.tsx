@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { createWorker } from 'tesseract.js';
+import { createWorker, PSM } from 'tesseract.js';
 import { useDealer } from '@/contexts/DealerContext';
 import { Loader2 } from 'lucide-react';
 
@@ -32,10 +32,10 @@ const DocumentScanner = () => {
       await worker.initialize('eng');
 
       // Set parameters optimized for license scanning
-      // Using PSM 4 which is ideal for single column text
+      // Using PSM.SINGLE_BLOCK which is equivalent to 4 for single column text
       await worker.setParameters({
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-. ',
-        tessedit_pageseg_mode: '4', // Using string format as required by PSM type
+        tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
         preserve_interword_spaces: '1',
       });
 
