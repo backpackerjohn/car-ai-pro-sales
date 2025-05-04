@@ -1,7 +1,7 @@
 
 import React from 'react';
 import Header from '@/components/layout/Header';
-import ChatInterface from '@/components/chat/ChatInterface';
+import GeminiAssist from '@/components/chat/GeminiAssist';
 import CustomerInfoTable from '@/components/customer/CustomerInfoTable';
 import DocumentManager from '@/components/documents/DocumentManager';
 import ScenarioSelector from '@/components/scenarios/ScenarioSelector';
@@ -25,7 +25,7 @@ const Index = () => {
             {/* Left section - Chat */}
             <div className="lg:col-span-2 flex flex-col gap-6">
               <div className="h-[500px]">
-                <ChatInterface />
+                <GeminiAssist />
               </div>
               <div>
                 <CustomerInfoTable />

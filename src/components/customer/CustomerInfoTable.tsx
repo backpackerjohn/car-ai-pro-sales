@@ -109,6 +109,28 @@ const CustomerInfoTable = () => {
                   )}
                 </TableCell>
               </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Email</TableCell>
+                <TableCell>{formatValue(currentCustomer.email)}</TableCell>
+                <TableCell>
+                  {currentCustomer.email ? (
+                    <span className="text-green-600 text-sm">Verified</span>
+                  ) : (
+                    <span className="text-amber-600 text-sm">Optional</span>
+                  )}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">Phone</TableCell>
+                <TableCell>{formatValue(currentCustomer.cellPhone)}</TableCell>
+                <TableCell>
+                  {currentCustomer.cellPhone ? (
+                    <span className="text-green-600 text-sm">Verified</span>
+                  ) : (
+                    <span className="text-amber-600 text-sm">Optional</span>
+                  )}
+                </TableCell>
+              </TableRow>
             </>
           )}
         </TableBody>

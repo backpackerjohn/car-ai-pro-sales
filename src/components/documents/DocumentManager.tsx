@@ -1,22 +1,17 @@
 
 import React from 'react';
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { File, FileCheck, FilePlus, Upload } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Upload } from "lucide-react";
 import { useDealer } from "@/contexts/DealerContext";
 import DocumentScanner from './DocumentScanner';
+import DocumentGenerator from './DocumentGenerator';
 import { dealerData } from '@/data/dealerData';
 
 const DocumentManager = () => {
-  const { salesScenario, requiredDocuments } = useDealer();
-
-  // Mock documents for demo
-  const documents = [
-    { id: 'doc-1', name: 'Deal Check List', generated: false, completed: false },
-    { id: 'doc-2', name: 'Delivery Report', generated: false, completed: false },
-    { id: 'doc-3', name: 'Privacy Policy', generated: true, completed: true },
-  ];
+  const { salesScenario } = useDealer();
 
   return (
     <div className="flex flex-col h-full border rounded-lg overflow-hidden bg-white">
@@ -39,48 +34,25 @@ const DocumentManager = () => {
         </div>
       </div>
       
-      <ScrollArea className="flex-grow p-4">
-        <DocumentScanner />
-        
-        <h3 className="font-semibold mt-6 mb-3">Required Documents</h3>
-        
-        <div className="space-y-3">
-          {documents.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No documents available for the current scenario.
-            </div>
-          ) : (
-            documents.map(doc => (
-              <Card key={doc.id} className="overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="flex items-center p-3">
-                    {doc.completed ? (
-                      <FileCheck className="h-5 w-5 text-green-500 mr-3" />
-                    ) : (
-                      <File className="h-5 w-5 text-dealerpro-primary mr-3" />
-                    )}
-                    <div className="flex-grow">
-                      <p className="font-medium text-sm">{doc.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {doc.generated ? 'Generated' : 'Not Generated'}
-                      </p>
-                    </div>
-                    <Button size="sm" variant={doc.generated ? "outline" : "default"} className="ml-2">
-                      {doc.generated ? 'View' : 'Generate'}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
-          )}
-        </div>
-      </ScrollArea>
-      
-      <div className="p-3 border-t">
-        <Button className="w-full bg-dealerpro-primary hover:bg-dealerpro-primary-light">
-          <FilePlus className="h-4 w-4 mr-2" />
-          Generate All Documents
-        </Button>
+      <div className="flex-grow flex flex-col">
+        <Tabs defaultValue="scanner" className="flex-grow flex flex-col">
+          <TabsList className="w-full grid grid-cols-2">
+            <TabsTrigger value="scanner">Document Scanner</TabsTrigger>
+            <TabsTrigger value="generator">Document Generator</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="scanner" className="flex-grow p-4 m-0">
+            <ScrollArea className="h-[600px]">
+              <DocumentScanner />
+            </ScrollArea>
+          </TabsContent>
+          
+          <TabsContent value="generator" className="flex-grow p-4 m-0">
+            <ScrollArea className="h-[600px]">
+              <DocumentGenerator />
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
