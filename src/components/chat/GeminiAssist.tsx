@@ -14,6 +14,21 @@ interface Message {
   timestamp: Date;
   fieldData?: Record<string, string>;
   salesSuggestion?: string;
+  salesTechnique?: SalesTechnique; // New field for tracking technique used
+}
+
+// New interface for sales techniques
+interface SalesTechnique {
+  type: SalesTechniqueType;
+  description: string;
+}
+
+// Types of sales techniques
+enum SalesTechniqueType {
+  WHAT_IF = 'what_if',
+  YES_LADDER = 'yes_ladder',
+  GIFT_LETTER = 'gift_letter',
+  GENERAL = 'general'
 }
 
 // Sales conversation stages
@@ -24,6 +39,12 @@ enum ConversationStage {
   HANDLING_OBJECTIONS = 'handling_objections',
   CLOSING = 'closing',
   FOLLOW_UP = 'follow_up'
+}
+
+// Track customer agreements for yes ladder technique
+interface CustomerAgreements {
+  count: number;
+  topics: string[];
 }
 
 const GeminiAssist = () => {
@@ -38,6 +59,7 @@ const GeminiAssist = () => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [conversationStage, setConversationStage] = useState<ConversationStage>(ConversationStage.INTRODUCTION);
+  const [customerAgreements, setCustomerAgreements] = useState<CustomerAgreements>({ count: 0, topics: [] });
   const { currentCustomer, setCurrentCustomer, salesScenario, fieldDefinitions } = useDealer();
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -59,13 +81,11 @@ const GeminiAssist = () => {
     const missingFields: string[] = [];
     
     Object.entries(fieldDefinitions).forEach(([fieldId, fieldDef]) => {
-      // Check if field is required for this scenario
       const isRequired = typeof fieldDef.required === 'function' 
         ? fieldDef.required(salesScenario)
         : fieldDef.required;
         
       if (isRequired) {
-        // Check if the field has a value
         const customerField = currentCustomer?.[fieldId as keyof typeof currentCustomer];
         if (!customerField) {
           missingFields.push(fieldDef.displayName);
@@ -74,6 +94,194 @@ const GeminiAssist = () => {
     });
     
     return missingFields;
+  };
+
+  // Generate what-if technique suggestion
+  const generateWhatIfTechnique = (objection: string): string => {
+    const objectionResponses: Record<string, string> = {
+      'price': 'What if we could find a financing option that fits within your monthly budget?',
+      'expensive': 'What if we could show you the long-term value that outweighs the initial investment?',
+      'interest': 'What if we could get you a lower interest rate than you expected?',
+      'payments': 'What if we could structure the payments to fit your current financial situation?',
+      'trade': 'What if we could give you more for your trade-in than you anticipated?',
+      'warranty': 'What if we could include an extended warranty at no additional cost?',
+      'features': 'What if this vehicle has features you haven\'t even considered that would improve your daily drive?',
+      'time': 'What if we could complete all the paperwork in half the time you expected?'
+    };
+
+    for (const [key, response] of Object.entries(objectionResponses)) {
+      if (objection.toLowerCase().includes(key)) {
+        return response;
+      }
+    }
+    
+    return 'What if we could address your specific concerns to make this work for you?';
+  };
+
+  // Generate yes ladder technique
+  const generateYesLadderQuestion = (): string => {
+    const agreementCount = customerAgreements.count;
+    
+    const yesLadderQuestions = [
+      "Would you agree that reliability is important in a vehicle?",
+      "Do you feel that having good safety features is valuable?",
+      "Would you say that fuel efficiency matters to you?",
+      "Is a comfortable driving experience something you value?",
+      "Do you think having the right financing options is essential?",
+      "Would you agree that getting good service after the sale is important?",
+      "Do you believe that the right vehicle can make your daily commute more enjoyable?"
+    ];
+    
+    // For more advanced agreements after initial small ones
+    const advancedQuestions = [
+      "Since you value reliability, would you agree that this model's track record is impressive?",
+      "Given your interest in safety, do you see how these features would protect your family?",
+      "Since fuel efficiency matters to you, can you see how this vehicle would save you money over time?",
+      "As someone who values comfort, do you feel this vehicle provides the experience you're looking for?",
+      "Now that we've found financing that works for you, would you say we've addressed your budget concerns?",
+      "Since we've covered all your main requirements, would you agree this vehicle checks all your boxes?"
+    ];
+    
+    // Use basic questions first, then advanced once we have some agreements
+    if (agreementCount < yesLadderQuestions.length) {
+      return yesLadderQuestions[agreementCount];
+    } else {
+      const advancedIndex = (agreementCount - yesLadderQuestions.length) % advancedQuestions.length;
+      return advancedQuestions[advancedIndex];
+    }
+  };
+
+  // Generate gift letter suggestion
+  const generateGiftLetterSuggestion = (): string => {
+    const giftOptions = [
+      "As a special bonus, we're including the extended warranty package as a gift. This means you get 3 years of worry-free driving.",
+      "Because we value your business, we're throwing in our premium detailing package as a gift with your purchase today.",
+      "I'm pleased to let you know that we're including the first year of maintenance as our gift to you.",
+      "As a token of our appreciation, we're including the all-weather floor mats and cargo package as a gift.",
+      "Great news! The finance manager has approved including the theft protection system as a complimentary gift."
+    ];
+    
+    return giftOptions[Math.floor(Math.random() * giftOptions.length)];
+  };
+
+  // Determine appropriate sales suggestion based on conversation stage
+  const generateSalesSuggestion = (userMessage: string): { suggestion: string, technique: SalesTechnique } => {
+    const lowerMessage = userMessage.toLowerCase();
+    
+    // Check if message contains objections for What-If technique
+    const objectionKeywords = ['price', 'expensive', 'cost', 'afford', 'interest', 'payments', 'trade', 'worth', 'warranty', 'features', 'time'];
+    const hasObjection = objectionKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    // Check if message indicates agreement for Yes Ladder
+    const agreementKeywords = ['yes', 'agree', 'sure', 'definitely', 'absolutely', 'ok', 'okay', 'sounds good'];
+    const hasAgreement = agreementKeywords.some(keyword => lowerMessage.includes(keyword));
+    
+    // If we find agreement, update the agreement tracker
+    if (hasAgreement) {
+      setCustomerAgreements(prev => ({
+        count: prev.count + 1,
+        topics: [...prev.topics, userMessage.substring(0, 20) + '...']
+      }));
+    }
+    
+    // Generate technique based on conversation stage
+    switch (conversationStage) {
+      case ConversationStage.INTRODUCTION:
+        return {
+          suggestion: "Focus on building rapport with personalized questions about their needs and preferences.",
+          technique: {
+            type: SalesTechniqueType.GENERAL,
+            description: "Rapport building - personalized questions"
+          }
+        };
+        
+      case ConversationStage.NEEDS_ASSESSMENT:
+        return {
+          suggestion: "Ask open-ended questions to explore what features matter most to the customer.",
+          technique: {
+            type: SalesTechniqueType.GENERAL,
+            description: "Needs assessment - open-ended questions"
+          }
+        };
+        
+      case ConversationStage.PRESENTATION:
+        if (customerAgreements.count >= 2) {
+          const yesLadderQuestion = generateYesLadderQuestion();
+          return {
+            suggestion: yesLadderQuestion,
+            technique: {
+              type: SalesTechniqueType.YES_LADDER,
+              description: "Yes ladder - sequential agreement"
+            }
+          };
+        } else {
+          return {
+            suggestion: "Connect vehicle features specifically to the needs they've mentioned.",
+            technique: {
+              type: SalesTechniqueType.GENERAL,
+              description: "Feature-benefit connection"
+            }
+          };
+        }
+        
+      case ConversationStage.HANDLING_OBJECTIONS:
+        if (hasObjection) {
+          const whatIfSuggestion = generateWhatIfTechnique(userMessage);
+          return {
+            suggestion: whatIfSuggestion,
+            technique: {
+              type: SalesTechniqueType.WHAT_IF,
+              description: "What-if technique for objection handling"
+            }
+          };
+        } else {
+          return {
+            suggestion: "Acknowledge their concerns and provide specific evidence to address them.",
+            technique: {
+              type: SalesTechniqueType.GENERAL,
+              description: "Objection handling - evidence-based reassurance"
+            }
+          };
+        }
+        
+      case ConversationStage.CLOSING:
+        if (customerAgreements.count >= 4) {
+          const giftSuggestion = generateGiftLetterSuggestion();
+          return {
+            suggestion: giftSuggestion,
+            technique: {
+              type: SalesTechniqueType.GIFT_LETTER,
+              description: "Gift letter - added value offering"
+            }
+          };
+        } else {
+          return {
+            suggestion: "Summarize all the benefits they've agreed are important and ask for the decision.",
+            technique: {
+              type: SalesTechniqueType.GENERAL,
+              description: "Benefit summary - decision request"
+            }
+          };
+        }
+        
+      case ConversationStage.FOLLOW_UP:
+        return {
+          suggestion: "Express appreciation for their time and confirm next steps with a specific timeframe.",
+          technique: {
+            type: SalesTechniqueType.GENERAL,
+            description: "Follow-up - clear next steps"
+          }
+        };
+        
+      default:
+        return {
+          suggestion: "Listen actively and respond to the customer's current needs.",
+          technique: {
+            type: SalesTechniqueType.GENERAL,
+            description: "Active listening"
+          }
+        };
+    }
   };
 
   // Construct prompt for Gemini API
@@ -95,7 +303,9 @@ When you identify customer information like names, addresses, phone numbers, etc
 <field name="address">123 Main St</field>
 
 When suggesting sales techniques, format them as:
-<sales_suggestion>Try using the "What if" technique to address their concern about price</sales_suggestion>
+<sales_suggestion>Try using the "${conversationStage === ConversationStage.HANDLING_OBJECTIONS ? 'What if' : 
+              conversationStage === ConversationStage.CLOSING ? 'Gift letter' : 
+              customerAgreements.count >= 3 ? 'Yes ladder' : 'General'}" technique to address their concern about price</sales_suggestion>
 
 Assess the conversation stage and recommend moving to the next stage when appropriate.
     `;
@@ -150,12 +360,14 @@ Assess the conversation stage and recommend moving to the next stage when approp
     if (Object.keys(fieldData).length === 0) return;
     
     setCurrentCustomer(prev => {
-      const updatedCustomer = { ...prev };
+      const updatedCustomer = { ...prev } as CustomerInfo;
       
       // Only update customer object with fields that are part of the schema
       Object.entries(fieldData).forEach(([key, value]) => {
-        if (key in fieldDefinitions) {
-          updatedCustomer[key as keyof typeof updatedCustomer] = value;
+        if (key in fieldDefinitions || key === 'firstName' || key === 'lastName' || 
+            key === 'address' || key === 'city' || key === 'state' || 
+            key === 'zipCode' || key === 'email' || key === 'cellPhone' || key === 'homePhone') {
+          updatedCustomer[key as keyof CustomerInfo] = value;
         }
       });
       
@@ -197,6 +409,9 @@ Assess the conversation stage and recommend moving to the next stage when approp
       // Simulate API delay
       await new Promise(resolve => setTimeout(resolve, 1500));
       
+      // Get appropriate sales technique based on conversation stage and message content
+      const { suggestion, technique } = generateSalesSuggestion(input);
+      
       // Simulate an AI response with structured data
       let mockedResponse = "I'd recommend discussing the financing options available for this customer. ";
       
@@ -207,6 +422,8 @@ Assess the conversation stage and recommend moving to the next stage when approp
         // If no customer data is available but user mentioned a name, extract from input
         if (input.toLowerCase().includes('stephen') || input.toLowerCase().includes('schreck')) {
           mockedResponse += '<field name="firstName">Stephen</field> <field name="lastName">Schreck</field>';
+        } else if (input.toLowerCase().includes('fred') || input.toLowerCase().includes('ryan')) {
+          mockedResponse += '<field name="firstName">Fred</field> <field name="lastName">Ryan</field>';
         }
       }
       
@@ -228,6 +445,8 @@ Assess the conversation stage and recommend moving to the next stage when approp
         mockedResponse += '<sales_suggestion>Try the "What if" technique: "What if we could find a financing option that fits within your monthly budget?"</sales_suggestion>';
       } else if (input.toLowerCase().includes('think') || input.toLowerCase().includes('consider')) {
         mockedResponse += '<sales_suggestion>Use the "Yes ladder" technique by asking small questions they can say yes to before discussing the purchase decision.</sales_suggestion>';
+      } else {
+        mockedResponse += `<sales_suggestion>${suggestion}</sales_suggestion>`;
       }
       
       mockedResponse += " Is there anything specific about the vehicle features you'd like to know?";
@@ -247,16 +466,27 @@ Assess the conversation stage and recommend moving to the next stage when approp
         sender: 'ai',
         timestamp: new Date(),
         fieldData: Object.keys(fieldData).length > 0 ? fieldData : undefined,
-        salesSuggestion: salesSuggestion || undefined
+        salesSuggestion: salesSuggestion || suggestion,
+        salesTechnique: technique
       };
       
       setMessages(prev => [...prev, aiResponse]);
       
-      // Update conversation stage based on context (simplified logic)
+      // Update conversation stage based on context (improved logic)
       if (messages.length > 4 && conversationStage === ConversationStage.INTRODUCTION) {
         setConversationStage(ConversationStage.NEEDS_ASSESSMENT);
       } else if (messages.length > 8 && conversationStage === ConversationStage.NEEDS_ASSESSMENT) {
         setConversationStage(ConversationStage.PRESENTATION);
+      } else if (messages.length > 12 && conversationStage === ConversationStage.PRESENTATION) {
+        if (input.toLowerCase().includes('concern') || input.toLowerCase().includes('worry') || 
+            input.toLowerCase().includes('price') || input.toLowerCase().includes('expensive')) {
+          setConversationStage(ConversationStage.HANDLING_OBJECTIONS);
+        }
+      } else if (messages.length > 16 || 
+                (conversationStage === ConversationStage.HANDLING_OBJECTIONS && 
+                 (input.toLowerCase().includes('fine') || input.toLowerCase().includes('good') || 
+                  input.toLowerCase().includes('great') || input.toLowerCase().includes('agree')))) {
+        setConversationStage(ConversationStage.CLOSING);
       }
       
     } catch (error) {
@@ -319,6 +549,12 @@ Assess the conversation stage and recommend moving to the next stage when approp
                 {message.salesSuggestion && (
                   <div className="mt-1 p-2 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded">
                     <strong>Sales Suggestion:</strong> {message.salesSuggestion}
+                  </div>
+                )}
+                
+                {message.salesTechnique && message.salesTechnique.type !== SalesTechniqueType.GENERAL && (
+                  <div className="mt-1 p-2 bg-blue-50 border border-blue-200 text-blue-800 text-xs rounded">
+                    <strong>Technique:</strong> {message.salesTechnique.description}
                   </div>
                 )}
                 
