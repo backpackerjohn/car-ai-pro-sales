@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,10 +32,10 @@ const DocumentScanner = () => {
       await worker.initialize('eng');
 
       // Set parameters optimized for license scanning
-      // Using number instead of string for PSM to match the correct type
+      // Using PSM 4 which is ideal for single column text
       await worker.setParameters({
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-. ',
-        tessedit_pageseg_mode: 4, // Using numeric value instead of string '4'
+        tessedit_pageseg_mode: '4', // Using string format as required by PSM type
         preserve_interword_spaces: '1',
       });
 
