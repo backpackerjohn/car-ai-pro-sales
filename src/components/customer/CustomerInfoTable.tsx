@@ -6,6 +6,20 @@ import { useDealer } from "@/contexts/DealerContext";
 const CustomerInfoTable = () => {
   const { currentCustomer } = useDealer();
   
+  // Function to format customer data for better display
+  const formatValue = (value: string | undefined) => {
+    if (!value) return '--';
+    
+    // Convert all-caps values to title case for better readability
+    if (value === value.toUpperCase()) {
+      return value.split(' ').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      ).join(' ');
+    }
+    
+    return value;
+  };
+  
   return (
     <div className="rounded-lg border overflow-hidden bg-white">
       <div className="p-3 bg-dealerpro-primary text-white font-semibold">
@@ -31,7 +45,7 @@ const CustomerInfoTable = () => {
             <>
               <TableRow>
                 <TableCell className="font-medium">First Name</TableCell>
-                <TableCell>{currentCustomer.firstName || '--'}</TableCell>
+                <TableCell>{formatValue(currentCustomer.firstName)}</TableCell>
                 <TableCell>
                   {currentCustomer.firstName ? (
                     <span className="text-green-600 text-sm">Verified</span>
@@ -42,7 +56,7 @@ const CustomerInfoTable = () => {
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">Last Name</TableCell>
-                <TableCell>{currentCustomer.lastName || '--'}</TableCell>
+                <TableCell>{formatValue(currentCustomer.lastName)}</TableCell>
                 <TableCell>
                   {currentCustomer.lastName ? (
                     <span className="text-green-600 text-sm">Verified</span>
@@ -53,7 +67,7 @@ const CustomerInfoTable = () => {
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">Address</TableCell>
-                <TableCell>{currentCustomer.address || '--'}</TableCell>
+                <TableCell>{formatValue(currentCustomer.address)}</TableCell>
                 <TableCell>
                   {currentCustomer.address ? (
                     <span className="text-green-600 text-sm">Verified</span>
@@ -64,9 +78,31 @@ const CustomerInfoTable = () => {
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">City</TableCell>
-                <TableCell>{currentCustomer.city || '--'}</TableCell>
+                <TableCell>{formatValue(currentCustomer.city)}</TableCell>
                 <TableCell>
                   {currentCustomer.city ? (
+                    <span className="text-green-600 text-sm">Verified</span>
+                  ) : (
+                    <span className="text-red-600 text-sm">Missing</span>
+                  )}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">State</TableCell>
+                <TableCell>{formatValue(currentCustomer.state)}</TableCell>
+                <TableCell>
+                  {currentCustomer.state ? (
+                    <span className="text-green-600 text-sm">Verified</span>
+                  ) : (
+                    <span className="text-red-600 text-sm">Missing</span>
+                  )}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="font-medium">ZIP Code</TableCell>
+                <TableCell>{formatValue(currentCustomer.zipCode)}</TableCell>
+                <TableCell>
+                  {currentCustomer.zipCode ? (
                     <span className="text-green-600 text-sm">Verified</span>
                   ) : (
                     <span className="text-red-600 text-sm">Missing</span>
