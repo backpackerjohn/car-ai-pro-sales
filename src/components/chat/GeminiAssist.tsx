@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +5,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Loader } from "lucide-react";
 import { useDealer } from "@/contexts/DealerContext";
 import { useToast } from "@/components/ui/use-toast";
+
+// Import CustomerInfo type from DealerContext
+import { CustomerInfo } from "@/contexts/DealerContext";
 
 interface Message {
   id: string;
