@@ -1,12 +1,21 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useDealer } from "@/contexts/DealerContext";
 import DocumentScanner from './DocumentScanner';
 import DocumentGenerator from './DocumentGenerator';
 import PDFTemplateManager from './PDFTemplateManager';
 
 const DocumentManager = () => {
   const [activeTab, setActiveTab] = useState('scanner');
+  const { salesScenario } = useDealer();
+  
+  // Switch to generator tab when a scenario is selected
+  useEffect(() => {
+    if (salesScenario) {
+      setActiveTab("generator");
+    }
+  }, [salesScenario]);
   
   return (
     <div className="h-full border rounded-lg overflow-hidden bg-white">

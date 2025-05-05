@@ -4,7 +4,6 @@ import Header from '@/components/layout/Header';
 import GeminiAssist from '@/components/chat/GeminiAssist';
 import CustomerInfoTable from '@/components/customer/CustomerInfoTable';
 import DocumentManager from '@/components/documents/DocumentManager';
-import ScenarioSelector from '@/components/scenarios/ScenarioSelector';
 import { DealerProvider } from '@/contexts/DealerContext';
 
 const Index = () => {
@@ -16,9 +15,6 @@ const Index = () => {
         <div className="container mx-auto p-4 flex-grow">
           <div className="flex gap-4 mb-4">
             <h1 className="text-2xl font-bold text-dealerpro-primary">Dashboard</h1>
-            <div className="ml-auto">
-              <ScenarioSelector />
-            </div>
           </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">

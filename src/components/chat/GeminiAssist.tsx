@@ -62,7 +62,7 @@ const GeminiAssist = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [conversationStage, setConversationStage] = useState<ConversationStage>(ConversationStage.INTRODUCTION);
   const [customerAgreements, setCustomerAgreements] = useState<CustomerAgreements>({ count: 0, topics: [] });
-  const { currentCustomer, setCurrentCustomer, salesScenario, fieldDefinitions } = useDealer();
+  const { currentCustomer, setCurrentCustomer, salesScenario, fieldDefinitions, currentVehicle } = useDealer();
   const { toast } = useToast();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -489,6 +489,20 @@ Assess the conversation stage and recommend moving to the next stage when approp
                  (input.toLowerCase().includes('fine') || input.toLowerCase().includes('good') || 
                   input.toLowerCase().includes('great') || input.toLowerCase().includes('agree')))) {
         setConversationStage(ConversationStage.CLOSING);
+      }
+      
+      // Add suggestion to generate sale if we have sufficient customer info but no scenario
+      if (currentCustomer?.firstName && currentCustomer?.lastName && 
+          currentVehicle?.make && currentVehicle?.model && 
+          !salesScenario && messages.length > 8) {
+        // Add suggestion to generate sale
+        const suggestionMessage: Message = {
+          id: (Date.now() + 2).toString(),
+          content: "I see we have gathered the essential customer and vehicle information. Would you like to generate sale documents now? Click the 'Generate Sale' button when you're ready.",
+          sender: 'ai',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, suggestionMessage]);
       }
       
     } catch (error) {
