@@ -149,6 +149,7 @@ const CustomerInfoTable = () => {
         <Button 
           onClick={handleGenerateSale}
           className="ml-auto bg-dealerpro-primary hover:bg-dealerpro-secondary flex"
+          data-generate-sale="true"
         >
           Generate Sale <ChevronRight className="ml-2 h-4 w-4" />
         </Button>
