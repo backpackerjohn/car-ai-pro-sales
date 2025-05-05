@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { dealerData } from '@/data/dealerData';
 
 // Define types
-interface CustomerInfo {
+export interface CustomerInfo {
   firstName?: string;
   lastName?: string;
   address?: string;
@@ -15,7 +15,7 @@ interface CustomerInfo {
   cellPhone?: string;
 }
 
-interface VehicleInfo {
+export interface VehicleInfo {
   vin?: string;
   stockNumber?: string;
   year?: string;
@@ -24,7 +24,7 @@ interface VehicleInfo {
   miles?: string;
 }
 
-interface TradeInInfo {
+export interface TradeInInfo {
   vin?: string;
   year?: string;
   make?: string;
@@ -32,7 +32,7 @@ interface TradeInInfo {
   miles?: string;
 }
 
-interface LenderInfo {
+export interface LenderInfo {
   name?: string;
   phone?: string;
   address?: string;
