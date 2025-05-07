@@ -5,9 +5,10 @@ import { useToast } from "@/components/ui/use-toast";
 import MessageDisplay from './MessageDisplay';
 import MessageInput from './MessageInput';
 import { useCustomerData } from './useCustomerData';
-import { extractStructuredData, createMockResponse } from './aiHelpers';
+import { extractStructuredData } from './aiHelpers';
 import { generateSalesSuggestion } from './salesTechniques';
 import { Message, ConversationStage, CustomerAgreements } from './types';
+import { supabase } from '@/integrations/supabase/client';
 
 const GeminiAssist = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -23,7 +24,7 @@ const GeminiAssist = () => {
   const [conversationStage, setConversationStage] = useState<ConversationStage>(ConversationStage.INTRODUCTION);
   const [customerAgreements, setCustomerAgreements] = useState<CustomerAgreements>({ count: 0, topics: [] });
   
-  const { currentCustomer, salesScenario, currentVehicle } = useDealer();
+  const { currentCustomer, salesScenario, currentVehicle, setCurrentCustomer } = useDealer();
   const { toast } = useToast();
   const { getMissingRequiredFields, updateCustomerData } = useCustomerData();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -37,6 +38,39 @@ const GeminiAssist = () => {
       }
     }
   }, [messages]);
+
+  // Save customer data to Supabase
+  const saveCustomerToSupabase = async (customerInfo: any) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('save-customer-data', {
+        body: { 
+          customerData: {
+            first_name: customerInfo.firstName,
+            last_name: customerInfo.lastName,
+            address: customerInfo.address,
+            city: customerInfo.city,
+            state: customerInfo.state,
+            zip_code: customerInfo.zipCode,
+            email: customerInfo.email,
+            cell_phone: customerInfo.cellPhone,
+            home_phone: customerInfo.homePhone,
+            vehicle_interest: customerInfo.vehicle ? { 
+              make: customerInfo.vehicle.make, 
+              model: customerInfo.vehicle.model 
+            } : null
+          }
+        }
+      });
+
+      if (error) {
+        console.error('Error saving to Supabase:', error);
+      } else {
+        console.log('Successfully saved customer data:', data);
+      }
+    } catch (error) {
+      console.error('Error invoking save-customer-data function:', error);
+    }
+  };
 
   // Handle sending a message
   const handleSendMessage = async () => {
@@ -70,21 +104,41 @@ const GeminiAssist = () => {
       // Get appropriate sales technique based on conversation stage and message content
       const { suggestion, technique } = generateSalesSuggestion(input, conversationStage, customerAgreements);
       
-      // In a real implementation, this would call the Gemini API
-      // For now, we'll simulate a response with mock data
+      // Format messages for the AI
+      const aiMessages = messages.map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.content
+      }));
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // Add the latest user message
+      aiMessages.push({
+        role: 'user',
+        content: input
+      });
       
-      // Create mock response
-      const mockedResponse = createMockResponse(input, currentCustomer, currentVehicle, suggestion);
+      // Call our OpenAI assistant via Edge Function
+      const response = await supabase.functions.invoke('ai-assistant', {
+        body: { messages: aiMessages }
+      });
+
+      if (response.error) {
+        throw new Error(`Error from AI service: ${response.error.message}`);
+      }
+      
+      const aiResponseText = response.data.response;
       
       // Extract and process structured data
-      const { cleanResponse, fieldData, salesSuggestion } = extractStructuredData(mockedResponse);
+      const { cleanResponse, fieldData, salesSuggestion } = extractStructuredData(aiResponseText);
       
       // Update customer data if fields were extracted
       if (Object.keys(fieldData).length > 0) {
         updateCustomerData(fieldData);
+        
+        // If we have enough customer data, save to Supabase
+        if (currentCustomer?.firstName && currentCustomer?.lastName) {
+          const updatedCustomer = { ...currentCustomer, ...fieldData };
+          saveCustomerToSupabase(updatedCustomer);
+        }
       }
       
       // Add AI response to messages
@@ -166,7 +220,7 @@ const GeminiAssist = () => {
   return (
     <div className="flex flex-col h-full border rounded-lg overflow-hidden bg-white">
       <div className="p-3 bg-dealerpro-primary text-white font-semibold border-b flex justify-between items-center">
-        <div>Sales Assistant (Gemini AI)</div>
+        <div>Sales Assistant (AI)</div>
         <div className="text-xs bg-dealerpro-secondary px-2 py-1 rounded-full">
           Stage: {conversationStage.replace('_', ' ')}
         </div>

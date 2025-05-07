@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,9 +10,13 @@ import {
   FileX, 
   File, 
   Check, 
-  AlertTriangle 
+  AlertTriangle,
+  Loader,
+  Pencil
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 // Template categories for organization
 enum TemplateCategory {
@@ -29,36 +33,100 @@ interface PDFTemplate {
   name: string;
   filename: string;
   category: TemplateCategory;
-  url: string;
+  url?: string;
   dateUploaded: Date;
+  formFields?: any;
 }
 
 const PDFTemplateManager = () => {
-  const [templates, setTemplates] = useState<PDFTemplate[]>([
-    {
-      id: '1',
-      name: 'Purchase Agreement',
-      filename: 'purchase-agreement.pdf',
-      category: TemplateCategory.SALES,
-      url: '/templates/purchase-agreement.pdf',
-      dateUploaded: new Date()
-    },
-    {
-      id: '2',
-      name: 'Credit Application',
-      filename: 'credit-application.pdf',
-      category: TemplateCategory.FINANCE,
-      url: '/templates/credit-application.pdf',
-      dateUploaded: new Date()
-    }
-  ]);
+  const [templates, setTemplates] = useState<PDFTemplate[]>([]);
   const [newTemplateName, setNewTemplateName] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory>(TemplateCategory.SALES);
   const [uploading, setUploading] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [formFields, setFormFields] = useState<any>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<PDFTemplate | null>(null);
   const { toast } = useToast();
   
+  // Load templates from Supabase
+  useEffect(() => {
+    fetchTemplates();
+  }, []);
+
+  const fetchTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pdf_templates')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data) {
+        const formattedTemplates = data.map(template => ({
+          id: template.id,
+          name: template.name,
+          filename: template.filename,
+          category: template.category as TemplateCategory || TemplateCategory.OTHER,
+          dateUploaded: new Date(template.created_at),
+          formFields: template.form_fields
+        }));
+        setTemplates(formattedTemplates);
+      }
+    } catch (error) {
+      console.error('Error loading templates:', error);
+      toast({
+        title: "Error loading templates",
+        description: "Could not load templates from the database",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Analyze PDF structure with OpenAI
+  const analyzePDFStructure = async (templateId: string, fileUrl: string, name: string) => {
+    setAnalyzing(true);
+    try {
+      const response = await supabase.functions.invoke('pdf-analyzer', {
+        body: { 
+          pdfUrl: fileUrl, 
+          templateName: name,
+          templateId: templateId
+        }
+      });
+
+      if (response.error) {
+        throw new Error(`Error analyzing PDF: ${response.error.message}`);
+      }
+
+      const fields = response.data.formFields;
+      setFormFields(fields);
+      toast({
+        title: "PDF Analysis Complete",
+        description: `Successfully analyzed ${fields.fields?.length || 0} form fields`,
+      });
+
+      // Refresh templates to get updated formFields
+      fetchTemplates();
+      
+      return fields;
+    } catch (error) {
+      console.error('Error analyzing PDF:', error);
+      toast({
+        title: "Analysis Failed",
+        description: "Could not analyze the PDF structure",
+        variant: "destructive",
+      });
+      return null;
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   // Handle template upload
-  const handleTemplateUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleTemplateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
@@ -84,37 +152,104 @@ const PDFTemplateManager = () => {
     
     setUploading(true);
     
-    // In a real implementation, this would upload to a server or storage service
-    // For now, we'll simulate the upload process
-    setTimeout(() => {
+    try {
+      // Upload to Supabase Storage
+      const filePath = `templates/${Date.now()}_${file.name}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('pdf_templates')
+        .upload(filePath, file);
+        
+      if (uploadError) {
+        throw uploadError;
+      }
+      
+      // Get public URL for the uploaded file
+      const { data: urlData } = await supabase.storage
+        .from('pdf_templates')
+        .getPublicUrl(filePath);
+        
+      const fileUrl = urlData.publicUrl;
+      
+      // Save metadata to the database
+      const { data: templateData, error: templateError } = await supabase
+        .from('pdf_templates')
+        .insert({
+          name: newTemplateName,
+          category: selectedCategory,
+          filename: file.name,
+          required_scenarios: ['new-vehicle', 'used-vehicle']
+        })
+        .select()
+        .single();
+        
+      if (templateError) {
+        throw templateError;
+      }
+      
+      // Analyze the PDF structure
+      analyzePDFStructure(templateData.id, fileUrl, newTemplateName);
+      
+      // Add to the UI list
       const newTemplate: PDFTemplate = {
-        id: Date.now().toString(),
+        id: templateData.id,
         name: newTemplateName,
         filename: file.name,
         category: selectedCategory,
-        url: URL.createObjectURL(file), // This is temporary for demonstration
-        dateUploaded: new Date()
+        url: fileUrl,
+        dateUploaded: new Date(),
       };
       
-      setTemplates(prev => [...prev, newTemplate]);
+      setTemplates(prev => [newTemplate, ...prev]);
       setNewTemplateName('');
-      setUploading(false);
       
       toast({
         title: "Template uploaded",
         description: `Successfully uploaded ${file.name}`,
       });
-    }, 2000);
+    } catch (error: any) {
+      console.error('Error uploading template:', error);
+      toast({
+        title: "Upload failed",
+        description: error.message || "An error occurred during upload",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
   };
   
   // Delete a template
-  const handleDeleteTemplate = (id: string) => {
-    setTemplates(prev => prev.filter(template => template.id !== id));
-    
-    toast({
-      title: "Template deleted",
-      description: "The template has been removed.",
-    });
+  const handleDeleteTemplate = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('pdf_templates')
+        .delete()
+        .eq('id', id);
+        
+      if (error) {
+        throw error;
+      }
+      
+      setTemplates(prev => prev.filter(template => template.id !== id));
+      
+      toast({
+        title: "Template deleted",
+        description: "The template has been removed.",
+      });
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      toast({
+        title: "Delete failed",
+        description: "Could not delete the template",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // View template form fields
+  const viewTemplateFields = (template: PDFTemplate) => {
+    setSelectedTemplate(template);
   };
   
   return (
@@ -215,16 +350,34 @@ const PDFTemplateManager = () => {
                           <p className="font-medium">{template.name}</p>
                           <p className="text-xs text-gray-500">
                             {template.filename} • {template.category.charAt(0).toUpperCase() + template.category.slice(1)}
+                            {template.formFields && 
+                              ` • ${typeof template.formFields.fields === 'object' ? 
+                                template.formFields.fields.length : 'Unknown'} fields`}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center">
+                      <div className="flex items-center space-x-1">
+                        <Button 
+                          size="icon" 
+                          variant="ghost"
+                          onClick={() => viewTemplateFields(template)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
                         <Button 
                           size="icon" 
                           variant="ghost"
                           onClick={() => {
                             // In a real app, this would open the template in a viewer
-                            window.open(template.url, '_blank');
+                            if (template.url) {
+                              window.open(template.url, '_blank');
+                            } else {
+                              toast({
+                                title: "URL not available",
+                                description: "Cannot open template preview",
+                                variant: "destructive",
+                              });
+                            }
                           }}
                         >
                           <Check className="h-4 w-4" />
@@ -251,13 +404,71 @@ const PDFTemplateManager = () => {
               <div>
                 <p className="font-medium">Important Information</p>
                 <p className="text-xs mt-1">
-                  Upload blank PDF templates that will be used for document generation. The system will automatically fill customer information in the appropriate fields when generating documents. Make sure your PDF has form fields defined for data entry.
+                  Upload blank PDF templates that will be used for document generation. The system will automatically analyze the form fields and fill customer information in the appropriate fields when generating documents. Make sure your PDF has form fields defined for data entry.
                 </p>
               </div>
             </div>
           </div>
         </div>
       </CardContent>
+
+      {/* Form Fields Dialog */}
+      {selectedTemplate && (
+        <Dialog open={!!selectedTemplate} onOpenChange={(open) => !open && setSelectedTemplate(null)}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Template Fields: {selectedTemplate.name}</DialogTitle>
+              <DialogDescription>
+                These are the form fields that were detected in the PDF.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="mt-4">
+              {analyzing ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <Loader className="h-8 w-8 animate-spin text-dealerpro-primary mb-2" />
+                  <p>Analyzing PDF structure...</p>
+                </div>
+              ) : selectedTemplate.formFields ? (
+                <div className="border rounded-md p-4">
+                  <pre className="text-xs whitespace-pre-wrap overflow-x-auto max-h-[60vh]">
+                    {JSON.stringify(selectedTemplate.formFields, null, 2)}
+                  </pre>
+                </div>
+              ) : (
+                <div className="text-center py-6 border rounded-md">
+                  <p>No form fields detected or analysis not yet performed.</p>
+                  <Button 
+                    onClick={() => {
+                      if (selectedTemplate.url) {
+                        analyzePDFStructure(
+                          selectedTemplate.id, 
+                          selectedTemplate.url, 
+                          selectedTemplate.name
+                        );
+                      }
+                    }}
+                    className="mt-2"
+                    disabled={!selectedTemplate.url || analyzing}
+                  >
+                    {analyzing ? 
+                      <Loader className="h-4 w-4 mr-2 animate-spin" /> : 
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                    }
+                    Analyze PDF Structure
+                  </Button>
+                </div>
+              )}
+            </div>
+            
+            <DialogFooter>
+              <Button onClick={() => setSelectedTemplate(null)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
   );
 };

@@ -2,6 +2,27 @@
 import { PDFDocument } from 'pdf-lib';
 import { CustomerInfo, VehicleInfo, TradeInInfo, LenderInfo } from '@/contexts/DealerContext';
 import { fieldMappings } from '@/data/pdfMappings';
+import { supabase } from '@/integrations/supabase/client';
+
+// Fetch template information from Supabase
+export async function getTemplateInfo(templateId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('pdf_templates')
+      .select('*')
+      .eq('id', templateId)
+      .single();
+      
+    if (error) {
+      throw error;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching template info:', error);
+    throw error;
+  }
+}
 
 // Prepare a flattened data object from all our context data
 export function prepareFormData(
@@ -43,14 +64,60 @@ export function prepareFormData(
   return formData;
 }
 
+// Get field mappings from analyzed PDF template
+export async function getFieldMappingsFromTemplate(templateId: string) {
+  try {
+    const template = await getTemplateInfo(templateId);
+    if (template?.form_fields?.fields) {
+      const templateFields = template.form_fields.fields;
+      const mappings: Record<string, { formLocations: string[] }> = {};
+      
+      templateFields.forEach((field: any) => {
+        if (field.mappings && field.mappings.length > 0) {
+          field.mappings.forEach((mapping: string) => {
+            if (!mappings[mapping]) {
+              mappings[mapping] = { formLocations: [] };
+            }
+            mappings[mapping].formLocations.push(field.id);
+          });
+        }
+      });
+      
+      return mappings;
+    } else {
+      console.log('No field mappings found in template, using default mappings');
+      return fieldMappings;
+    }
+  } catch (error) {
+    console.error('Error getting field mappings from template:', error);
+    // Fall back to default mappings
+    return fieldMappings;
+  }
+}
+
 // Fill a PDF form with our data
 export async function fillPdfForm(
-  templateName: string,
+  templateId: string,
   formData: Record<string, string>
 ): Promise<Uint8Array> {
   try {
+    // Get template info from Supabase
+    const template = await getTemplateInfo(templateId);
+    if (!template) {
+      throw new Error('Template not found');
+    }
+    
+    // Get the template URL from Storage
+    const { data: urlData } = await supabase.storage
+      .from('pdf_templates')
+      .getPublicUrl(`templates/${template.filename}`);
+      
+    const templateUrl = urlData.publicUrl;
+    
+    // Get customized field mappings for this template
+    const fieldMappingsForTemplate = await getFieldMappingsFromTemplate(templateId);
+    
     // Load the PDF template
-    const templateUrl = `/templates/${templateName}`;
     const templateBytes = await fetch(templateUrl).then(res => res.arrayBuffer());
     const pdfDoc = await PDFDocument.load(templateBytes);
     
@@ -62,31 +129,25 @@ export async function fillPdfForm(
       // Find the mapping for this data field
       let formLocations: string[] = [];
       
-      // Customer fields
-      if (fieldMappings.customerInfo?.personalDetails?.[dataKey]?.formLocations) {
-        formLocations = fieldMappings.customerInfo.personalDetails[dataKey].formLocations;
-      } else if (fieldMappings.customerInfo?.contactInfo?.[dataKey]?.formLocations) {
-        formLocations = fieldMappings.customerInfo.contactInfo[dataKey].formLocations;
-      } else if (fieldMappings.customerInfo?.financialInfo?.[dataKey]?.formLocations) {
-        formLocations = fieldMappings.customerInfo.financialInfo[dataKey].formLocations;
+      // Check if we have a mapping for this field
+      if (fieldMappingsForTemplate[dataKey]?.formLocations) {
+        formLocations = fieldMappingsForTemplate[dataKey].formLocations;
       }
       
-      // Vehicle fields (with prefix removed)
+      // Also check prefixed fields (vehicle_, tradeIn_, etc.)
       const vehicleKey = dataKey.startsWith('vehicle_') ? dataKey.substring(8) : null;
-      if (vehicleKey && fieldMappings.vehicleInfo?.currentVehicle?.[vehicleKey]?.formLocations) {
-        formLocations = fieldMappings.vehicleInfo.currentVehicle[vehicleKey].formLocations;
+      if (vehicleKey && fieldMappingsForTemplate[vehicleKey]?.formLocations) {
+        formLocations = [...formLocations, ...fieldMappingsForTemplate[vehicleKey].formLocations];
       }
       
-      // Trade-in fields (with prefix removed)
       const tradeInKey = dataKey.startsWith('tradeIn_') ? dataKey.substring(8) : null;
-      if (tradeInKey && fieldMappings.vehicleInfo?.tradeInVehicle?.[tradeInKey]?.formLocations) {
-        formLocations = fieldMappings.vehicleInfo.tradeInVehicle[tradeInKey].formLocations;
+      if (tradeInKey && fieldMappingsForTemplate[tradeInKey]?.formLocations) {
+        formLocations = [...formLocations, ...fieldMappingsForTemplate[tradeInKey].formLocations];
       }
       
-      // Lender fields (with prefix removed)
       const lenderKey = dataKey.startsWith('lender_') ? dataKey.substring(7) : null;
-      if (lenderKey && fieldMappings.lenderInfo?.[lenderKey]?.formLocations) {
-        formLocations = fieldMappings.lenderInfo[lenderKey].formLocations;
+      if (lenderKey && fieldMappingsForTemplate[lenderKey]?.formLocations) {
+        formLocations = [...formLocations, ...fieldMappingsForTemplate[lenderKey].formLocations];
       }
       
       // Try to fill each possible form field location

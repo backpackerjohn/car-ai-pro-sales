@@ -9,7 +9,105 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      customers: {
+        Row: {
+          additional_data: Json | null
+          address: string | null
+          cell_phone: string | null
+          city: string | null
+          created_at: string
+          drivers_license: string | null
+          email: string | null
+          financial_info: Json | null
+          first_name: string | null
+          home_phone: string | null
+          id: string
+          last_name: string | null
+          lender_info: Json | null
+          state: string | null
+          trade_in_info: Json | null
+          updated_at: string
+          vehicle_interest: Json | null
+          zip_code: string | null
+        }
+        Insert: {
+          additional_data?: Json | null
+          address?: string | null
+          cell_phone?: string | null
+          city?: string | null
+          created_at?: string
+          drivers_license?: string | null
+          email?: string | null
+          financial_info?: Json | null
+          first_name?: string | null
+          home_phone?: string | null
+          id?: string
+          last_name?: string | null
+          lender_info?: Json | null
+          state?: string | null
+          trade_in_info?: Json | null
+          updated_at?: string
+          vehicle_interest?: Json | null
+          zip_code?: string | null
+        }
+        Update: {
+          additional_data?: Json | null
+          address?: string | null
+          cell_phone?: string | null
+          city?: string | null
+          created_at?: string
+          drivers_license?: string | null
+          email?: string | null
+          financial_info?: Json | null
+          first_name?: string | null
+          home_phone?: string | null
+          id?: string
+          last_name?: string | null
+          lender_info?: Json | null
+          state?: string | null
+          trade_in_info?: Json | null
+          updated_at?: string
+          vehicle_interest?: Json | null
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
+      pdf_templates: {
+        Row: {
+          category: string | null
+          created_at: string
+          description: string | null
+          filename: string
+          form_fields: Json | null
+          id: string
+          name: string
+          required_scenarios: string[] | null
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          filename: string
+          form_fields?: Json | null
+          id?: string
+          name: string
+          required_scenarios?: string[] | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          filename?: string
+          form_fields?: Json | null
+          id?: string
+          name?: string
+          required_scenarios?: string[] | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

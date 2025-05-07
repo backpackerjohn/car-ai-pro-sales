@@ -1,1 +1,11 @@
+
 project_id = "agsmozmjupxlshrgoygt"
+
+[functions.ai-assistant]
+verify_jwt = false
+
+[functions.pdf-analyzer]
+verify_jwt = false
+
+[functions.save-customer-data]
+verify_jwt = false
