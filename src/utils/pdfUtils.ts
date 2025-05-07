@@ -1,4 +1,5 @@
 
+
 import { PDFDocument } from 'pdf-lib';
 import { CustomerInfo, VehicleInfo, TradeInInfo, LenderInfo } from '@/contexts/DealerContext';
 import { fieldMappings } from '@/data/pdfMappings';
@@ -68,26 +69,30 @@ export function prepareFormData(
 export async function getFieldMappingsFromTemplate(templateId: string) {
   try {
     const template = await getTemplateInfo(templateId);
-    if (template?.form_fields?.fields) {
-      const templateFields = template.form_fields.fields;
-      const mappings: Record<string, { formLocations: string[] }> = {};
-      
-      templateFields.forEach((field: any) => {
-        if (field.mappings && field.mappings.length > 0) {
-          field.mappings.forEach((mapping: string) => {
-            if (!mappings[mapping]) {
-              mappings[mapping] = { formLocations: [] };
-            }
-            mappings[mapping].formLocations.push(field.id);
-          });
-        }
-      });
-      
-      return mappings;
-    } else {
-      console.log('No field mappings found in template, using default mappings');
-      return fieldMappings;
+    if (template?.form_fields && typeof template.form_fields === 'object') {
+      // Type check and safe access to fields property
+      const formFields = template.form_fields as { fields?: any[] };
+      if (formFields.fields && Array.isArray(formFields.fields)) {
+        const templateFields = formFields.fields;
+        const mappings: Record<string, { formLocations: string[] }> = {};
+        
+        templateFields.forEach((field: any) => {
+          if (field.mappings && field.mappings.length > 0) {
+            field.mappings.forEach((mapping: string) => {
+              if (!mappings[mapping]) {
+                mappings[mapping] = { formLocations: [] };
+              }
+              mappings[mapping].formLocations.push(field.id);
+            });
+          }
+        });
+        
+        return mappings;
+      }
     }
+    
+    console.log('No field mappings found in template, using default mappings');
+    return fieldMappings;
   } catch (error) {
     console.error('Error getting field mappings from template:', error);
     // Fall back to default mappings
@@ -171,3 +176,4 @@ export async function fillPdfForm(
     throw error;
   }
 }
+
