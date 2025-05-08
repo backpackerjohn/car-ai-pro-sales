@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 // Template categories for organization
 enum TemplateCategory {
@@ -44,7 +44,6 @@ const PDFTemplateManager = () => {
   const [selectedCategory, setSelectedCategory] = useState<TemplateCategory>(TemplateCategory.SALES);
   const [uploading, setUploading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
-  const [formFields, setFormFields] = useState<any>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<PDFTemplate | null>(null);
   const { toast } = useToast();
   
@@ -102,7 +101,6 @@ const PDFTemplateManager = () => {
       }
 
       const fields = response.data.formFields;
-      setFormFields(fields);
       toast({
         title: "PDF Analysis Complete",
         description: `Successfully analyzed ${fields.fields?.length || 0} form fields`,
@@ -153,6 +151,17 @@ const PDFTemplateManager = () => {
     setUploading(true);
     
     try {
+      // Create storage bucket if it doesn't exist
+      const { data: bucketData, error: bucketError } = await supabase.storage.getBucket('pdf_templates');
+      
+      if (bucketError && bucketError.message.includes('not found')) {
+        // Create the bucket if it doesn't exist
+        await supabase.storage.createBucket('pdf_templates', {
+          public: true,
+          fileSizeLimit: 10485760, // 10MB
+        });
+      }
+      
       // Upload to Supabase Storage
       const filePath = `templates/${Date.now()}_${file.name}`;
       
@@ -188,7 +197,7 @@ const PDFTemplateManager = () => {
       }
       
       // Analyze the PDF structure
-      analyzePDFStructure(templateData.id, fileUrl, newTemplateName);
+      await analyzePDFStructure(templateData.id, fileUrl, newTemplateName);
       
       // Add to the UI list
       const newTemplate: PDFTemplate = {
@@ -289,41 +298,36 @@ const PDFTemplateManager = () => {
                 </select>
               </div>
               
-              <div>
-                <Label htmlFor="pdfFile">PDF File</Label>
-                <div className="mt-1">
-                  <input
-                    id="pdfFile"
-                    type="file"
-                    accept="application/pdf"
-                    className="sr-only"
-                    onChange={handleTemplateUpload}
-                    disabled={uploading}
-                  />
-                  <label
-                    htmlFor="pdfFile"
-                    className={`flex items-center justify-center w-full border-2 border-dashed rounded-md py-3 px-4 ${
-                      uploading ? 'bg-gray-100 border-gray-300 cursor-not-allowed' : 'border-gray-300 hover:border-dealerpro-primary cursor-pointer'
-                    }`}
-                  >
-                    <div className="flex items-center">
-                      {uploading ? (
-                        <>
-                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-dealerpro-primary mr-2"></div>
-                          <span>Uploading...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-5 w-5 text-gray-400 mr-2" />
-                          <span>Select PDF file</span>
-                        </>
-                      )}
-                    </div>
-                  </label>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Upload blank PDF templates that will be filled with customer data
-                  </p>
-                </div>
+              <div className="mt-2">
+                <Button 
+                  variant="secondary" 
+                  className="w-full flex items-center justify-center gap-2"
+                  onClick={() => document.getElementById('pdfFileInput')?.click()}
+                  disabled={uploading}
+                >
+                  {uploading ? (
+                    <>
+                      <Loader className="h-4 w-4 animate-spin" />
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      <span>Select PDF File</span>
+                    </>
+                  )}
+                </Button>
+                <input
+                  id="pdfFileInput"
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  onChange={handleTemplateUpload}
+                  disabled={uploading}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Upload PDF templates with form fields that will be filled with customer data
+                </p>
               </div>
             </div>
           </div>

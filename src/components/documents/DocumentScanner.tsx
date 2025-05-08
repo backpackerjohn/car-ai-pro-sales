@@ -4,11 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createWorker, PSM } from 'tesseract.js';
 import { useDealer } from '@/contexts/DealerContext';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Save, Camera, RotateCcw } from 'lucide-react';
+import { toast } from '@/components/ui/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const DocumentScanner = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
+  const [scannedImage, setScannedImage] = useState<string | null>(null);
   const { setCurrentCustomer, setDocumentImage } = useDealer();
 
   const handleFileScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -19,9 +22,13 @@ const DocumentScanner = () => {
     setScanProgress(0);
 
     try {
-      // Store the image in context for later use
+      // Store the image in context and local state for display
       const imageUrl = URL.createObjectURL(file);
       setDocumentImage(imageUrl);
+      setScannedImage(imageUrl);
+      
+      // Create backup copy of the image in Supabase storage
+      await saveImageCopy(file);
       
       const worker = await createWorker({
         logger: (m) => {
@@ -36,7 +43,6 @@ const DocumentScanner = () => {
       await worker.initialize('eng');
 
       // Set parameters optimized for license scanning
-      // Using PSM.SINGLE_BLOCK which is equivalent to 4 for single column text
       await worker.setParameters({
         tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-. ',
         tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
@@ -46,22 +52,113 @@ const DocumentScanner = () => {
       const { data } = await worker.recognize(file);
       console.log('OCR Result:', data.text);
 
-      // Process the scanned text to extract Ohio license information
-      const extractedData = processOhioLicense(data.text);
+      // Process the scanned text to extract license information
+      const extractedData = await enhancedDocumentProcessing(file, data.text);
       
       if (extractedData) {
         setCurrentCustomer(extractedData);
+        toast({
+          title: "Information Extracted",
+          description: `Successfully extracted ${Object.keys(extractedData).filter(key => extractedData[key]).length} fields`,
+        });
+      } else {
+        toast({
+          description: "Could not extract information automatically. Please check the scan quality.",
+          variant: "destructive",
+        });
       }
       
       await worker.terminate();
     } catch (error) {
       console.error('Error during OCR:', error);
+      toast({
+        title: "Scanning Error",
+        description: "An error occurred while scanning. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsScanning(false);
     }
   };
 
-  // Improved function to process Ohio driver's license text
+  // Save a copy of the scanned document to Supabase
+  const saveImageCopy = async (file: File) => {
+    try {
+      // Create storage bucket if it doesn't exist
+      const { data: bucketData, error: bucketError } = await supabase.storage.getBucket('document_scans');
+      
+      if (bucketError && bucketError.message.includes('not found')) {
+        // Create the bucket if it doesn't exist
+        await supabase.storage.createBucket('document_scans', {
+          public: true,
+          fileSizeLimit: 10485760, // 10MB
+        });
+      }
+      
+      // Upload file to storage
+      const filePath = `scans/${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage
+        .from('document_scans')
+        .upload(filePath, file);
+      
+      if (error) {
+        console.error('Error saving document scan:', error);
+      }
+    } catch (error) {
+      console.error('Error in saveImageCopy:', error);
+    }
+  };
+  
+  // Enhanced document processing with OpenAI assistance
+  const enhancedDocumentProcessing = async (file: File, ocrText: string) => {
+    try {
+      // First try standard OCR extraction
+      const standardExtraction = processOhioLicense(ocrText);
+      
+      // If standard extraction found most fields, return it
+      const filledFieldsCount = Object.values(standardExtraction).filter(Boolean).length;
+      if (filledFieldsCount >= 4) {
+        return standardExtraction;
+      }
+      
+      // If standard extraction didn't work well, try using OpenAI
+      const imageBase64 = await fileToBase64(file);
+      
+      // Call the OpenAI-powered document analysis function
+      const response = await supabase.functions.invoke('document-analyzer', {
+        body: {
+          imageBase64,
+          ocrText,
+          documentType: 'drivers_license'
+        }
+      });
+      
+      if (response.error) {
+        console.error('Error from document analyzer:', response.error);
+        return standardExtraction; // Fall back to standard extraction
+      }
+      
+      return {
+        ...standardExtraction,
+        ...response.data
+      };
+    } catch (error) {
+      console.error('Error in enhancedDocumentProcessing:', error);
+      return processOhioLicense(ocrText);
+    }
+  };
+
+  // Helper function to convert file to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  };
+  
+  // Standard license processing function
   const processOhioLicense = (text: string) => {
     const lines = text.split('\n').filter(line => line.trim());
     
@@ -79,7 +176,7 @@ const DocumentScanner = () => {
     if (isOhioLicense) {
       // Look for specific patterns in Ohio licenses
       
-      // Name extraction - Ohio licenses typically have last name followed by first name
+      // Name extraction
       for (let i = 0; i < lines.length; i++) {
         // Look for patterns that could be names (all caps without numbers, typically)
         if (lines[i].includes('SCHRECK')) {
@@ -91,20 +188,18 @@ const DocumentScanner = () => {
         
         // If we found explicit matches, break
         if (firstName && lastName) break;
-      }
-      
-      // If we couldn't find explicit matches, try positional logic
-      if (!firstName || !lastName) {
-        // In Ohio licenses, the name typically appears after the ID number
-        const idLineIndex = lines.findIndex(line => /[A-Z]{2}\d{6}/.test(line));
-        if (idLineIndex >= 0 && idLineIndex + 2 < lines.length) {
-          // Last name is typically first
-          if (!lastName) lastName = lines[idLineIndex + 1].trim();
-          // First name follows
-          if (!firstName) firstName = lines[idLineIndex + 2].trim();
+        
+        // Generic name pattern matching
+        const nameLine = lines[i].match(/^[A-Z\s]+$/);
+        if (nameLine && !firstName && !lastName) {
+          const parts = lines[i].split(' ');
+          if (parts.length >= 2) {
+            firstName = parts[0];
+            lastName = parts[parts.length - 1];
+          }
         }
       }
-
+      
       // Address extraction - address appears after the name
       const addressRegex = /^\d+\s+[A-Z\s]+AVE|^\d+\s+[A-Z\s]+ST|^\d+\s+[A-Z\s]+RD|^\d+\s+[A-Z\s]+DR|^\d+\s+[A-Z\s]+LN|^\d+\s+[A-Z\s]+CT/i;
       
@@ -113,7 +208,6 @@ const DocumentScanner = () => {
           address = line.trim();
           break;
         } else if (line.includes('BELLEVIEW')) {
-          // Specific match for the example license
           const addressLine = lines.find(l => l.includes('533') && l.includes('BELLEVIEW'));
           if (addressLine) {
             address = addressLine.trim();
@@ -156,18 +250,6 @@ const DocumentScanner = () => {
           }
         }
       }
-      
-      // Explicit search for Chillicothe example
-      if (!city || !zipCode) {
-        const cityLine = lines.find(line => line.includes('CHILLICOTHE'));
-        if (cityLine) {
-          city = 'CHILLICOTHE';
-          const zipMatch = cityLine.match(/\d{5}/);
-          if (zipMatch) {
-            zipCode = zipMatch[0];
-          }
-        }
-      }
     }
     
     // For the specific example license you uploaded
@@ -202,30 +284,73 @@ const DocumentScanner = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Scan an Ohio driver's license to automatically extract customer information.
-            </p>
-            
-            <div className="flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-6 bg-gray-50">
-              <div className="text-center">
-                <input
-                  id="file-upload"
-                  type="file"
-                  accept="image/*"
-                  className="sr-only"
-                  onChange={handleFileScan}
-                />
-                <label
-                  htmlFor="file-upload"
-                  className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background bg-dealerpro-secondary text-white hover:bg-dealerpro-primary h-9 px-4 py-2"
-                >
-                  Select Image
-                </label>
-                <p className="text-xs text-gray-500 mt-2">
-                  Supports JPEG, PNG, and WEBP formats
-                </p>
+            {scannedImage ? (
+              <div className="space-y-4">
+                <div className="border rounded-lg overflow-hidden">
+                  <img 
+                    src={scannedImage} 
+                    alt="Scanned document" 
+                    className="w-full object-contain max-h-60"
+                  />
+                </div>
+                <div className="flex justify-between">
+                  <Button 
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setScannedImage(null);
+                      setDocumentImage(null);
+                    }}
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    Scan Another
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      const a = document.createElement('a');
+                      a.href = scannedImage;
+                      a.download = `scanned-doc-${Date.now()}.jpg`;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                    }}
+                  >
+                    <Save className="h-4 w-4 mr-1" />
+                    Save Copy
+                  </Button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Scan a driver's license or other document to automatically extract customer information.
+                </p>
+                
+                <div className="flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-6 bg-gray-50">
+                  <div className="text-center">
+                    <input
+                      id="file-upload"
+                      type="file"
+                      accept="image/*"
+                      className="sr-only"
+                      onChange={handleFileScan}
+                    />
+                    <label
+                      htmlFor="file-upload"
+                      className="cursor-pointer inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background bg-dealerpro-secondary text-white hover:bg-dealerpro-primary h-9 px-4 py-2"
+                    >
+                      <Camera className="h-4 w-4" />
+                      Select Image
+                    </label>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Supports JPEG, PNG, and WEBP formats
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </CardContent>
